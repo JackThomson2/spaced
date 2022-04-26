@@ -1,3 +1,5 @@
+pub mod jump_tables;
+
 #[cfg(not(target_arch = "x86_64"))]
 mod fallback;
 

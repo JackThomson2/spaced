@@ -45,9 +45,7 @@ pub fn count_spaces(string: &str) -> u32 {
 
         for pos in i..string.len() {
             let c = *string.as_ptr().add(pos);
-            if c == b'\r' || c == b'\n' || c == b' ' {
-                count += 1;
-            }
+            count += *crate::jump_tables::OPPO_JUMP_TABLE.get_unchecked(c as usize) as u32;
         }
         count
     }
@@ -135,12 +133,68 @@ pub unsafe fn de_space_str(string: &mut str) -> usize {
 
     for pos_i in i..string.len() {
         let c = *string.as_ptr().add(pos_i);
-        if c == b'\r' || c == b'\n' || c == b' ' {
-            continue;
-        }
-
         *string.as_mut_ptr().add(pos) = c;
-        pos += 1;
+        pos += *crate::jump_tables::JUMP_TABLE.get_unchecked(c as usize);
+    }
+
+    pos
+}
+
+#[inline]
+pub unsafe fn de_space_str_u4(string: &mut str) -> usize {
+    let spaces128 = x86::_mm_set1_epi8(b' ' as i8);
+    let newline128 = x86::_mm_set1_epi8(b'\n' as i8);
+    let carriage128 = x86::_mm_set1_epi8(b'\r' as i8);
+
+    let mut pos: usize = 0;
+    let mut i = 0;
+
+    while i + 64 - 1 < string.len() {
+        let ptr = string.as_ptr().add(i);
+
+        let mut x1 = x86::_mm_loadu_si128(ptr.cast());
+        let mut x2 = x86::_mm_loadu_si128(ptr.add(16).cast());
+        let mut x3 = x86::_mm_loadu_si128(ptr.add(32).cast());
+        let mut x4 = x86::_mm_loadu_si128(ptr.add(48).cast());
+
+        let mut mask_16 = 0;
+
+        x1 = cleanm128(x1, spaces128, newline128, carriage128, &mut mask_16);
+        x86::_mm_storeu_si128(string.as_mut_ptr().add(pos).cast(), x1);
+        pos += 16 - mask_16.count_ones() as usize;
+
+        x2 = cleanm128(x2, spaces128, newline128, carriage128, &mut mask_16);
+        x86::_mm_storeu_si128(string.as_mut_ptr().add(pos).cast(), x2);
+        pos += 16 - mask_16.count_ones() as usize;
+
+        x3 = cleanm128(x3, spaces128, newline128, carriage128, &mut mask_16);
+        x86::_mm_storeu_si128(string.as_mut_ptr().add(pos).cast(), x3);
+        pos += 16 - mask_16.count_ones() as usize;
+
+        x4 = cleanm128(x4, spaces128, newline128, carriage128, &mut mask_16);
+        x86::_mm_storeu_si128(string.as_mut_ptr().add(pos).cast(), x4);
+        pos += 16 - mask_16.count_ones() as usize;
+
+        i += 64;
+    }
+
+    while i + 16 - 1 < string.len() {
+        let ptr = string.as_ptr().add(i);
+        let mut x = x86::_mm_loadu_si128(ptr.cast());
+        let mut mask_16 = 0;
+
+        x = cleanm128(x, spaces128, newline128, carriage128, &mut mask_16);
+
+        x86::_mm_storeu_si128(string.as_mut_ptr().add(pos).cast(), x);
+
+        pos += 16 - mask_16.count_ones() as usize;
+        i += 16;
+    }
+
+    for pos_i in i..string.len() {
+        let c = *string.as_ptr().add(pos_i);
+        *string.as_mut_ptr().add(pos) = c;
+        pos += *crate::jump_tables::JUMP_TABLE.get_unchecked(c as usize);
     }
 
     pos
@@ -196,12 +250,8 @@ pub unsafe fn de_space_str_avx(string: &mut str) -> usize {
 
     for pos_i in i..string.len() {
         let c = *string.as_ptr().add(pos_i);
-        if c == b'\r' || c == b'\n' || c == b' ' {
-            continue;
-        }
-
         *string.as_mut_ptr().add(pos) = c;
-        pos += 1;
+        pos += *crate::jump_tables::JUMP_TABLE.get_unchecked(c as usize);
     }
     pos
 }
